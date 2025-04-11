@@ -11,7 +11,7 @@ class SignalProcessor {
         this.LF_MAX = 0.15;    // LF帯域の上限 (Hz)
         this.HF_MIN = 0.15;    // HF帯域の下限 (Hz)
         this.HF_MAX = 0.4;     // HF帯域の上限 (Hz)
-        this.MAX_WINDOW_SIZE = 60; // 最大ウィンドウサイズを60秒に縮小（サンプル数）
+        this.MAX_WINDOW_SIZE = 300; // 最大ウィンドウサイズを60秒に縮小（サンプル数）
         this.ENVELOPE_WINDOW_SIZE = 30;    // 瞬時振幅計算の時間窓サイズ縮小（サンプル数）
         this.SMOOTHING_WINDOW_SIZE = 15;   // 振幅スムージングの窓サイズ縮小（サンプル数）
         this.AVERAGING_WINDOW_SIZE = 30;   // 移動平均の窓サイズ縮小（サンプル数）
@@ -294,9 +294,9 @@ class SignalProcessor {
             if (rawValues.length > 0) {
                 // 計算した値を昇順にソート
                 const sortedValues = [...rawValues].sort((a, b) => a - b);
-                // 外れ値の影響を減らすため中央80%を使用
-                const startIndex = Math.floor(sortedValues.length * 0.1);
-                const endIndex = Math.floor(sortedValues.length * 0.9);
+                // 外れ値の影響を減らすため中央60%を使用
+                const startIndex = Math.floor(sortedValues.length * 0.2);
+                const endIndex = Math.floor(sortedValues.length * 0.6)
                 const validValues = sortedValues.slice(startIndex, endIndex);
                 // 平均値を計算
                 meanVal = validValues.length > 0 ? 

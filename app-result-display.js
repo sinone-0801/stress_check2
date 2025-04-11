@@ -1,6 +1,7 @@
 /**
- * app-debug.js
- * PPG解析アプリケーションのメインスクリプト（デバッグ用短時間測定版＋最終結果表示機能追加）
+ * app-result-display.js
+ * PPG解析アプリケーションのメインスクリプト（デバッグ用短時間測定版＋最終結果表示機能）
+ * 結果セクション表示の問題を修正したバージョン
  */
 
 // グローバル変数として SignalProcessor が存在するか確認
@@ -38,12 +39,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const hfiaValueElement = document.getElementById('hfia-value');
     const measureTimeElement = document.getElementById('measure-time');
     const measureTimeSelect = document.getElementById('measure-time-select');
+    
+    // 結果セクション要素の取得（存在確認）
     const resultSection = document.getElementById('result-section');
+    console.log("結果セクション要素の取得:", resultSection);
+    
     const finalLfiaElement = document.getElementById('final-lfia');
     const finalHfiaElement = document.getElementById('final-hfia');
     const finalStressStateElement = document.getElementById('final-stress-state');
     const finalHeartRateElement = document.getElementById('final-heart-rate');
     const finallLfHfRatioElement = document.getElementById('final-lf-hf-ratio');
+    const finalScatterGraph = document.getElementById('final-scatter-graph');
     
     // カメラプロセッサとシグナルプロセッサの初期化
     const cameraProcessor = new CameraProcessor();
@@ -145,6 +151,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // 結果セクションを非表示
             if (resultSection) {
                 resultSection.style.display = 'none';
+                console.log("結果セクションを非表示にしました");
             }
             
             // グラフをクリア
@@ -241,28 +248,45 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 最終結果の表示
     function displayFinalResults() {
+        console.log("最終結果表示処理を開始");
+        
         // 結果セクションを表示
         if (resultSection) {
             resultSection.style.display = 'block';
+            console.log("結果セクションを表示しました");
+        } else {
+            console.error("結果セクション要素が見つかりません");
+            return;
         }
         
+        // 有効なデータのみをフィルタリング
+        const validLfia = finalResults.lfiaValues.filter(val => isFinite(val) && !isNaN(val) && val > 0);
+        const validHfia = finalResults.hfiaValues.filter(val => isFinite(val) && !isNaN(val) && val > 0);
+        const validHr = finalResults.heartRates.filter(val => isFinite(val) && !isNaN(val) && val > 0);
+        const validLf = finalResults.lfValues.filter(val => isFinite(val) && !isNaN(val));
+        const validHf = finalResults.hfValues.filter(val => isFinite(val) && !isNaN(val));
+        
+        console.log("有効なデータ数: LFiA=", validLfia.length, "HFiA=", validHfia.length, "HR=", validHr.length);
+        
         // データから平均値を計算
-        const lfiaAvg = finalResults.lfiaValues.length > 0 ? 
-            finalResults.lfiaValues.reduce((sum, val) => sum + val, 0) / finalResults.lfiaValues.length : 0;
+        const lfiaAvg = validLfia.length > 0 ? 
+            validLfia.reduce((sum, val) => sum + val, 0) / validLfia.length : 0;
         
-        const hfiaAvg = finalResults.hfiaValues.length > 0 ? 
-            finalResults.hfiaValues.reduce((sum, val) => sum + val, 0) / finalResults.hfiaValues.length : 0;
+        const hfiaAvg = validHfia.length > 0 ? 
+            validHfia.reduce((sum, val) => sum + val, 0) / validHfia.length : 0;
         
-        const hrAvg = finalResults.heartRates.length > 0 ? 
-            finalResults.heartRates.reduce((sum, val) => sum + val, 0) / finalResults.heartRates.length : 0;
+        const hrAvg = validHr.length > 0 ? 
+            validHr.reduce((sum, val) => sum + val, 0) / validHr.length : 0;
             
         // LF/HF比を計算
         let lfHfRatio = 0;
-        if (finalResults.lfValues.length > 0 && finalResults.hfValues.length > 0) {
-            const lfAvgPower = finalResults.lfValues.reduce((sum, val) => sum + val * val, 0) / finalResults.lfValues.length;
-            const hfAvgPower = finalResults.hfValues.reduce((sum, val) => sum + val * val, 0) / finalResults.hfValues.length;
+        if (validLf.length > 0 && validHf.length > 0) {
+            const lfAvgPower = validLf.reduce((sum, val) => sum + val * val, 0) / validLf.length;
+            const hfAvgPower = validHf.reduce((sum, val) => sum + val * val, 0) / validHf.length;
             lfHfRatio = hfAvgPower !== 0 ? lfAvgPower / hfAvgPower : 0;
         }
+        
+        console.log("計算結果: LFiA=", lfiaAvg, "HFiA=", hfiaAvg, "HR=", hrAvg, "LF/HF=", lfHfRatio);
         
         // 結果の表示
         if (finalLfiaElement) {
@@ -310,7 +334,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // 最終的な散布図を作成（測定中の全データポイントを使用）
-        updateFinalScatterPlot(finalResults.lfiaValues, finalResults.hfiaValues);
+        if (finalScatterGraph) {
+            updateFinalScatterPlot(validLfia, validHfia);
+        }
     }
     
     // 最終的な散布図の更新
@@ -318,8 +344,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!lfiaData || !hfiaData || lfiaData.length === 0 || hfiaData.length === 0) return;
         
         // 散布図の描画先要素
-        const finalScatterGraph = document.getElementById('final-scatter-graph');
-        if (!finalScatterGraph) return;
+        if (!finalScatterGraph) {
+            console.error("最終散布図要素が見つかりません");
+            return;
+        }
+        
+        console.log("最終散布図の更新: 点数=", Math.min(lfiaData.length, hfiaData.length));
         
         // グラフをクリア
         finalScatterGraph.innerHTML = '';
@@ -341,7 +371,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        if (validPoints.length === 0) return;
+        if (validPoints.length === 0) {
+            console.error("有効な散布図データポイントがありません");
+            return;
+        }
         
         // 論文のように固定範囲を使用
         const hfiaMin = 0;
@@ -388,44 +421,39 @@ document.addEventListener('DOMContentLoaded', function() {
                 pointElement.style.left = `${x}%`;
                 pointElement.style.bottom = `${y}%`;
                 
-                // 最新のポイントは大きく表示
-                if (i === validPoints.length - 1) {
-                    pointElement.style.width = '8px';
-                    pointElement.style.height = '8px';
-                    pointElement.style.transform = 'translate(-4px, 4px)';
-                }
-                
                 finalScatterGraph.appendChild(pointElement);
             }
         });
         
         // 平均点を追加
-        const lfiaAvg = validPoints.reduce((sum, pt) => sum + pt.lfia, 0) / validPoints.length;
-        const hfiaAvg = validPoints.reduce((sum, pt) => sum + pt.hfia, 0) / validPoints.length;
-        
-        // 平均点の位置を計算
-        const clampedAvgHF = Math.max(hfiaMin, Math.min(hfiaMax, hfiaAvg));
-        const clampedAvgLF = Math.max(lfiaMin, Math.min(lfiaMax, lfiaAvg));
-        
-        const avgX = ((clampedAvgHF - hfiaMin) / (hfiaMax - hfiaMin)) * 100;
-        const avgY = ((clampedAvgLF - lfiaMin) / (lfiaMax - lfiaMin)) * 100;
-        
-        // 平均点を描画
-        const avgPointElement = document.createElement('div');
-        avgPointElement.className = 'scatter-point-avg';
-        avgPointElement.style.left = `${avgX}%`;
-        avgPointElement.style.bottom = `${avgY}%`;
-        avgPointElement.style.width = '12px';
-        avgPointElement.style.height = '12px';
-        avgPointElement.style.transform = 'translate(-6px, 6px)';
-        avgPointElement.style.border = '2px solid black';
-        avgPointElement.style.backgroundColor = 'yellow';
-        avgPointElement.style.zIndex = '10';
-        
-        // ツールチップを追加
-        avgPointElement.title = `平均値: (HFiA=${hfiaAvg.toFixed(2)}, LFiA=${lfiaAvg.toFixed(2)})`;
-        
-        finalScatterGraph.appendChild(avgPointElement);
+        if (validPoints.length > 0) {
+            const lfiaAvg = validPoints.reduce((sum, pt) => sum + pt.lfia, 0) / validPoints.length;
+            const hfiaAvg = validPoints.reduce((sum, pt) => sum + pt.hfia, 0) / validPoints.length;
+            
+            // 平均点の位置を計算
+            const clampedAvgHF = Math.max(hfiaMin, Math.min(hfiaMax, hfiaAvg));
+            const clampedAvgLF = Math.max(lfiaMin, Math.min(lfiaMax, lfiaAvg));
+            
+            const avgX = ((clampedAvgHF - hfiaMin) / (hfiaMax - hfiaMin)) * 100;
+            const avgY = ((clampedAvgLF - lfiaMin) / (lfiaMax - lfiaMin)) * 100;
+            
+            // 平均点を描画
+            const avgPointElement = document.createElement('div');
+            avgPointElement.className = 'scatter-point-avg';
+            avgPointElement.style.left = `${avgX}%`;
+            avgPointElement.style.bottom = `${avgY}%`;
+            avgPointElement.style.width = '12px';
+            avgPointElement.style.height = '12px';
+            avgPointElement.style.transform = 'translate(-6px, 6px)';
+            avgPointElement.style.border = '2px solid black';
+            avgPointElement.style.backgroundColor = 'yellow';
+            avgPointElement.style.zIndex = '10';
+            
+            // ツールチップを追加
+            avgPointElement.title = `平均値: (HFiA=${hfiaAvg.toFixed(2)}, LFiA=${lfiaAvg.toFixed(2)})`;
+            
+            finalScatterGraph.appendChild(avgPointElement);
+        }
     }
     
     // グラフをクリア
@@ -439,7 +467,6 @@ document.addEventListener('DOMContentLoaded', function() {
         scatterGraph.innerHTML = '';
         
         // 最終結果グラフもクリア
-        const finalScatterGraph = document.getElementById('final-scatter-graph');
         if (finalScatterGraph) {
             finalScatterGraph.innerHTML = '';
         }

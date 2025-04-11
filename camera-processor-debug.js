@@ -31,14 +31,15 @@ class CameraProcessor {
         this.onFrameRateUpdate = null;
         this.onPeakDetected = null;
         
-        // 設定値（デバッグ用に調整）
-        this.MIN_PEAK_DISTANCE_MS = 250;  // 最小ピーク間距離（ミリ秒）240BPM相当
-        this.RRI_MIN_MS = 300;            // 最小RRI（ミリ秒）200BPM相当
-        this.RRI_MAX_MS = 1500;           // 最大RRI（ミリ秒）40BPM相当
-        this.PEAK_WINDOW_SIZE = 5;       // ピーク検出ウィンドウサイズ（デバッグ用に縮小）
-        this.MAX_PPG_SAMPLES = 60;       // 最大PPGサンプル数（デバッグ用に縮小）
-        this.SAMPLE_RATE = 30;            // 推定サンプルレート（カメラのフレームレート）
-
+        // 設定値（改良版）
+        this.MIN_PEAK_DISTANCE_MS = 300;   // 最小ピーク間距離（ミリ秒）200BPM相当
+        this.RRI_MIN_MS = 240;             // 最小RRI（ミリ秒）250BPM相当
+        this.RRI_MAX_MS = 1500;            // 最大RRI（ミリ秒）40BPM相当
+        this.PEAK_WINDOW_SIZE = 7;         // ピーク検出ウィンドウサイズ（大きくして安定性向上）
+        this.MAX_PPG_SAMPLES = 90;         // 最大PPGサンプル数（3秒分のデータに増加）
+        this.SAMPLE_RATE = 30;             // 推定サンプルレート（カメラのフレームレート）
+        this.PEAK_THRESHOLD_PERCENT = 55;  // ピーク検出の閾値（%）
+    
         // 信号処理
         this.signalProcessor = new SignalProcessor();
     }
@@ -184,35 +185,67 @@ class CameraProcessor {
     }
     
     /**
-     * PPG信号の前処理を強化するメソッド
+     * PPG信号の前処理を強化するメソッド（改良版）
      * @param {Array} rawPpgData - 生のPPGデータ
      * @returns {Array} 前処理済みのPPGデータ
      */
     preprocessPpgSignal(rawPpgData) {
-        if (rawPpgData.length < 3) return [...rawPpgData];
+        if (rawPpgData.length < 5) return [...rawPpgData];
         
-        // ステップ1: 移動平均フィルタで高周波ノイズを除去
-        let filteredPpg = this.signalProcessor.movingAverage(rawPpgData, 3);
+        // ステップ1: 外れ値の除去（極端な値を検出）
+        const median = this.signalProcessor.calculateMedian(rawPpgData);
+        const mad = this.signalProcessor.calculateMAD(rawPpgData, median);
+        const threshold = 3.5; // MADの閾値（外れ値検出）
         
-        // ステップ2: トレンド除去（信号プロセッサのメソッドを利用）
-        const mean = filteredPpg.reduce((sum, val) => sum + val, 0) / filteredPpg.length;
-        const centeredSignal = filteredPpg.map(val => val - mean);
-        filteredPpg = this.signalProcessor.detrendSignal(centeredSignal);
-        
-        // ステップ3: 外れ値の除去（中央値絶対偏差法）
-        const median = this.signalProcessor.calculateMedian(filteredPpg);
-        const mad = this.signalProcessor.calculateMAD(filteredPpg, median);
-        const threshold = 3.0; // 閾値（通常は2.5-3.5）
-        
-        filteredPpg = filteredPpg.map(val => {
+        let cleanedPpg = rawPpgData.map(val => {
             const z = Math.abs(val - median) / (mad || 1);
             return z > threshold ? median : val;
         });
         
-        // ステップ4: 再度スムージング
-        filteredPpg = this.signalProcessor.movingAverage(filteredPpg, 3);
+        // ステップ2: バンドパスフィルタの代わりに、移動平均フィルタで高周波ノイズを除去
+        let filteredPpg = this.signalProcessor.movingAverage(cleanedPpg, 5);
         
-        return filteredPpg;
+        // ステップ3: トレンド除去（低周波ドリフトを除去）
+        const mean = filteredPpg.reduce((sum, val) => sum + val, 0) / filteredPpg.length;
+        const centeredSignal = filteredPpg.map(val => val - mean);
+        filteredPpg = this.signalProcessor.detrendSignal(centeredSignal);
+        
+        // ステップ4: サビツキーゴレイフィルタの代わりに、重み付き移動平均でスムージング
+        const weightedSmoothing = (data, windowSize = 5) => {
+            const result = [];
+            for (let i = 0; i < data.length; i++) {
+                let sum = 0;
+                let weightSum = 0;
+                
+                for (let j = Math.max(0, i - Math.floor(windowSize / 2)); 
+                    j <= Math.min(data.length - 1, i + Math.floor(windowSize / 2)); j++) {
+                    // 距離に基づく重み（中心に近いほど重み大）
+                    const weight = 1 - Math.abs(i - j) / (Math.floor(windowSize / 2) + 1);
+                    sum += data[j] * weight;
+                    weightSum += weight;
+                }
+                
+                result.push(weightSum > 0 ? sum / weightSum : 0);
+            }
+            return result;
+        };
+        
+        filteredPpg = weightedSmoothing(filteredPpg, 7);
+        
+        // ステップ5: 信号の標準化（0〜1の範囲）
+        const minVal = Math.min(...filteredPpg);
+        const maxVal = Math.max(...filteredPpg);
+        const range = maxVal - minVal;
+        
+        if (range > 0) {
+            filteredPpg = filteredPpg.map(val => (val - minVal) / range);
+        }
+        
+        // 元のスケールに戻す（ただし正規化されている）
+        const origRange = Math.max(...rawPpgData) - Math.min(...rawPpgData);
+        const origMean = rawPpgData.reduce((sum, val) => sum + val, 0) / rawPpgData.length;
+        
+        return filteredPpg.map(val => origMean + (val - 0.5) * origRange);
     }
 
     /**
@@ -322,79 +355,95 @@ class CameraProcessor {
     }
     
     /**
-     * ピーク検出処理（デバッグ用に閾値を低く設定）
+     * ピーク検出処理（改良版）
+     * PPG波形から心拍に相当するピークを検出する
      */
     detectPeaks() {
-        // デバッグ用に閾値を下げる
-        if (this.ppgData.length > this.PEAK_WINDOW_SIZE) {
-            // 移動平均を適用して信号をスムーズにする
-            const smoothedPpg = this.signalProcessor.movingAverage(this.ppgData, 3);
+        // 必要最小限のデータポイント数を確認
+        if (this.ppgData.length < this.PEAK_WINDOW_SIZE * 2) {
+            return;
+        }
+        
+        // 移動平均を適用して信号をスムーズにする（ノイズ除去）
+        const smoothedPpg = this.signalProcessor.movingAverage(this.ppgData, 5);
+        
+        // データ範囲と適応的な閾値を計算
+        const recentPpg = smoothedPpg.slice(-Math.min(smoothedPpg.length, 30)); // 直近のデータのみ使用
+        const min = Math.min(...recentPpg);
+        const max = Math.max(...recentPpg);
+        const range = max - min;
+        
+        // 閾値を上げて、主要な心拍ピークのみを検出（ディクロティックノッチなどを除外）
+        const threshold = min + (range * 0.55); // 55%の閾値（より高く設定）
+        
+        // ピーク検出のウィンドウサイズを大きくして、より広い範囲で最大値を確認
+        const peakWindowSize = Math.max(this.PEAK_WINDOW_SIZE, 7); // 最低7ポイントのウィンドウ
+        
+        // 現在検出可能な位置（境界チェック）
+        const currentIndex = smoothedPpg.length - peakWindowSize - 1;
+        
+        // ピーク検出を実行
+        if (currentIndex > 0) {
+            const currentTime = this.timeValues[currentIndex];
+            const timeSinceLastPeak = currentTime - this.lastPeakTime;
             
-            // 現在の点がピークかどうか検出
-            const currentIndex = smoothedPpg.length - this.PEAK_WINDOW_SIZE;
-            if (currentIndex > 0) {
-                const currentPoint = smoothedPpg[currentIndex];
-                
-                // ピークかどうかチェック（ローカル最大値）
+            // 最小ピーク間隔（ミリ秒）
+            const MIN_PEAK_INTERVAL_MS = this.MIN_PEAK_DISTANCE_MS; // クラス定数を使用
+            
+            // 閾値と最小間隔をクリアしているかチェック
+            if (timeSinceLastPeak > MIN_PEAK_INTERVAL_MS && smoothedPpg[currentIndex] > threshold) {
+                // ローカル最大値かチェック
                 let isPeak = true;
-                for (let i = 1; i <= this.PEAK_WINDOW_SIZE / 2; i++) {
+                for (let i = 1; i <= peakWindowSize / 2; i++) {
                     // 前後の点と比較
-                    if (currentPoint <= smoothedPpg[currentIndex - i] || 
-                        currentPoint <= smoothedPpg[currentIndex + i]) {
+                    if (smoothedPpg[currentIndex] <= smoothedPpg[currentIndex - i] || 
+                        smoothedPpg[currentIndex] <= smoothedPpg[currentIndex + i]) {
                         isPeak = false;
                         break;
                     }
                 }
                 
-                // 振幅の閾値を確認（ノイズ除去のため）
+                // 前後のウィンドウ内に、より大きなピークがないことを確認
                 if (isPeak) {
-                    // 過去のデータから振幅の閾値を計算（デバッグ用に閾値を下げる）
-                    const recentPpg = smoothedPpg.slice(-Math.min(smoothedPpg.length, 15));
-                    const min = Math.min(...recentPpg);
-                    const max = Math.max(...recentPpg);
-                    // 閾値を40%に下げる（より多くのピークを検出）
-                    const threshold = min + (max - min) * 0.4;
+                    let isBiggestInWindow = true;
                     
-                    // 閾値未満のピークは無視
-                    if (currentPoint < threshold) {
-                        isPeak = false;
-                    }
-                }
-                
-                // 前回のピークから一定時間経過しているか確認
-                const currentTime = this.timeValues[currentIndex];
-                const timeSinceLastPeak = currentTime - this.lastPeakTime;
-                
-                // 最小ピーク間隔を設定（デバッグ用に短く）
-                const MIN_PEAK_INTERVAL_MS = 200;
-                
-                if (isPeak && timeSinceLastPeak > MIN_PEAK_INTERVAL_MS) {
-                    // ピークを検出
-                    this.peaks.push(currentTime);
-                    this.lastPeakTime = currentTime;
+                    // 拡張された時間窓で確認（心拍の検出ミスを防ぐ）
+                    const extendedWindow = Math.floor(MIN_PEAK_INTERVAL_MS / 30); // 約30Hzのサンプリングレートを前提
                     
-                    // ピーク検出をコールバックで通知
-                    if (this.onPeakDetected) {
-                        this.onPeakDetected(this.peaks.length);
+                    for (let i = Math.max(0, currentIndex - extendedWindow); 
+                        i <= Math.min(smoothedPpg.length - 1, currentIndex + extendedWindow); i++) {
+                        // 自分自身以外でより大きな値があれば、そちらがピーク
+                        if (i !== currentIndex && smoothedPpg[i] > smoothedPpg[currentIndex]) {
+                            isBiggestInWindow = false;
+                            break;
+                        }
                     }
                     
-                    // RRIを計算（2つ以上のピークがある場合）
-                    if (this.peaks.length > 1) {
-                        const newRri = this.peaks[this.peaks.length - 1] - this.peaks[this.peaks.length - 2];
+                    if (isBiggestInWindow) {
+                        // 有効なピークを検出
+                        this.peaks.push(currentTime);
+                        this.lastPeakTime = currentTime;
                         
-                        // RRIが妥当な範囲内か確認（40BPM-250BPMの範囲に制限 - デバッグ用に範囲を広げる）
-                        const RRI_MIN_MS = 240;  // 250BPM相当
-                        const RRI_MAX_MS = 1500; // 40BPM相当
+                        // ピーク検出をコールバックで通知
+                        if (this.onPeakDetected) {
+                            this.onPeakDetected(this.peaks.length);
+                        }
                         
-                        if (newRri >= RRI_MIN_MS && newRri <= RRI_MAX_MS) {
-                            this.rriData.push(newRri);
+                        // RRIを計算（2つ以上のピークがある場合）
+                        if (this.peaks.length > 1) {
+                            const newRri = this.peaks[this.peaks.length - 1] - this.peaks[this.peaks.length - 2];
                             
-                            // RRIデータをシグナルプロセッサに渡してHRV解析の精度を上げる
-                            this.signalProcessor.addRriData(newRri, currentTime);
-                            
-                            // RRIデータをコールバックで通知
-                            if (this.onRriUpdate) {
-                                this.onRriUpdate(this.rriData);
+                            // RRIが妥当な範囲内か確認（40-250BPM相当）
+                            if (newRri >= this.RRI_MIN_MS && newRri <= this.RRI_MAX_MS) {
+                                this.rriData.push(newRri);
+                                
+                                // RRIデータをシグナルプロセッサに渡してHRV解析の精度を上げる
+                                this.signalProcessor.addRriData(newRri, currentTime);
+                                
+                                // RRIデータをコールバックで通知
+                                if (this.onRriUpdate) {
+                                    this.onRriUpdate(this.rriData);
+                                }
                             }
                         }
                     }

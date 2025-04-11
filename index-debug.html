@@ -17,6 +17,94 @@
             margin: 10px 0;
             display: none;
         }
+        
+        /* 結果表示スタイル */
+        .result-section {
+            margin-top: 20px;
+            background-color: #f9f9f9;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: none;
+        }
+        
+        .result-section h2 {
+            color: #333;
+            margin-top: 0;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 10px;
+        }
+        
+        .result-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .result-item {
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .result-item h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1rem;
+            color: #666;
+        }
+        
+        .result-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .result-unit {
+            font-size: 0.9rem;
+            color: #666;
+            margin-left: 5px;
+        }
+        
+        .final-scatter {
+            height: 300px;
+            margin-top: 20px;
+            position: relative;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .state-rest {
+            background-color: #e3f2fd;
+            border-left: 5px solid #3f51b5;
+        }
+        
+        .state-relaxation {
+            background-color: #e8f5e9;
+            border-left: 5px solid #4CAF50;
+        }
+        
+        .state-physical {
+            background-color: #fff3e0;
+            border-left: 5px solid #ff9800;
+        }
+        
+        .state-mental {
+            background-color: #ffebee;
+            border-left: 5px solid #f44336;
+        }
+        
+        .scatter-point-avg {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            transform: translate(-5px, 5px);
+        }
     </style>
 </head>
 <body>
@@ -54,6 +142,39 @@
         <div id="heart-rate-display" class="heart-rate-display" style="display: none;">
             <div id="heart-rate" class="heart-rate">-- BPM</div>
             <div id="avg-rri">平均RRI: -- ms</div>
+        </div>
+        
+        <!-- 測定結果セクション -->
+        <div id="result-section" class="result-section">
+            <h2>測定結果</h2>
+            <div class="result-grid">
+                <div class="result-item">
+                    <h3>平均心拍数</h3>
+                    <span id="final-heart-rate" class="result-value">--</span>
+                    <span class="result-unit">BPM</span>
+                </div>
+                <div class="result-item">
+                    <h3>LF/HF比</h3>
+                    <span id="final-lf-hf-ratio" class="result-value">--</span>
+                </div>
+                <div class="result-item">
+                    <h3>LFiA (低周波瞬時振幅)</h3>
+                    <span id="final-lfia" class="result-value">--</span>
+                </div>
+                <div class="result-item">
+                    <h3>HFiA (高周波瞬時振幅)</h3>
+                    <span id="final-hfia" class="result-value">--</span>
+                </div>
+            </div>
+            
+            <div id="final-stress-state" class="result-item">
+                ストレス状態の判定中...
+            </div>
+            
+            <div class="final-scatter-container">
+                <h3>最終LFiA-HFiA散布図 (2DiA)</h3>
+                <div id="final-scatter-graph" class="final-scatter scatter-plot"></div>
+            </div>
         </div>
         
         <div class="graph-section">
@@ -171,6 +292,7 @@
                 <li>指が画面全体を覆うようにしてください</li>
                 <li>測定中は指をなるべく動かさないでください</li>
                 <li>測定時間を選択してから計測を開始してください（デフォルト60秒）</li>
+                <li>測定終了後に結果が表示されます</li>
             </ol>
             <p class="disclaimer">注意: このアプリは医療機器ではありません。正確な測定には専用の機器をご使用ください。</p>
         </div>
@@ -190,6 +312,6 @@
     <!-- 次にCameraProcessorを読み込む -->
     <script src="camera-processor-debug.js"></script>
     <!-- 最後にメインアプリケーションを読み込む -->
-    <script src="app-debug.js"></script>
+    <script src="app-result-display.js"></script>
 </body>
 </html>
