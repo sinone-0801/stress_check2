@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>指先PPGによるRRI予測と解析アプリ</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h1>指先PPGによるRRI予測と解析アプリ</h1>
+    
+    <div class="container">
+        <div class="camera-select">
+            <label for="camera-select">カメラを選択:</label>
+            <select id="camera-select"></select>
+        </div>
+        
+        <div class="video-container">
+            <video id="video" autoplay playsinline muted></video>
+            <canvas id="canvas" class="overlay"></canvas>
+        </div>
+        
+        <div class="controls">
+            <button id="start-btn" class="start">測定開始</button>
+            <button id="stop-btn" class="stop" style="display: none;">測定停止</button>
+        </div>
+        
+        <div id="error-message" class="error-message"></div>
+        
+        <div id="heart-rate-display" class="heart-rate-display" style="display: none;">
+            <div id="heart-rate" class="heart-rate">-- BPM</div>
+            <div id="avg-rri">平均RRI: -- ms</div>
+        </div>
+        
+        <div class="graph-section">
+            <div class="graph-container">
+                <div class="graph-title">PPG波形</div>
+                <div class="graph" id="ppg-graph"></div>
+                <div class="graph-labels">
+                    <span id="ppg-max">0</span>
+                    <span id="ppg-min">0</span>
+                </div>
+            </div>
+            
+            <div class="graph-container">
+                <div class="graph-title">RRI変動</div>
+                <div class="graph" id="rri-graph"></div>
+                <div class="graph-labels">
+                    <span>1200ms</span>
+                    <span>600ms</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="advanced-analysis-section">
+            <h2>高度な解析</h2>
+            <div class="graph-section two-columns">
+                <div class="graph-container">
+                    <div class="graph-title">LF (低周波成分)</div>
+                    <div class="graph" id="lf-graph"></div>
+                </div>
+                
+                <div class="graph-container">
+                    <div class="graph-title">HF (高周波成分)</div>
+                    <div class="graph" id="hf-graph"></div>
+                </div>
+            </div>
+            
+            <div class="graph-section two-columns">
+                <div class="graph-container">
+                    <div class="graph-title">LFiA (低周波瞬時振幅)</div>
+                    <div class="graph" id="lfia-graph"></div>
+                </div>
+                
+                <div class="graph-container">
+                    <div class="graph-title">HFiA (高周波瞬時振幅)</div>
+                    <div class="graph" id="hfia-graph"></div>
+                </div>
+            </div>
+            
+            <div class="graph-container">
+                <div class="graph-title">2DiA (LFiA-HFiA散布図)</div>
+                <div class="graph scatter-plot" id="scatter-graph"></div>
+            </div>
+        </div>
+        
+        <div class="instructions">
+            <p><strong>使用方法:</strong></p>
+            <ol>
+                <li>明るい環境で使用してください</li>
+                <li>指先をカメラに近づけて、LEDライトがある場合はオンにしてください</li>
+                <li>指が画面全体を覆うようにしてください</li>
+                <li>測定中は指をなるべく動かさないでください</li>
+                <li>測定には30秒ほどかかることがあります</li>
+            </ol>
+            <p class="disclaimer">注意: このアプリは医療機器ではありません。正確な測定には専用の機器をご使用ください。</p>
+        </div>
+        
+        <div class="debug-toggle" id="debug-toggle">デバッグ情報を表示</div>
+        <div class="debug-container" id="debug-container">
+            <div>検出したピーク数: <span id="peak-count">0</span></div>
+            <div>最新のPPG値: <span id="current-ppg">0</span></div>
+            <div>フレームレート: <span id="framerate">0</span> fps</div>
+            <div>LFiA: <span id="lfia-value">0</span> ms</div>
+            <div>HFiA: <span id="hfia-value">0</span> ms</div>
+        </div>
+    </div>
+
+    <!-- 必ずSignalProcessorを先に読み込む -->
+    <script src="signal-processing.js"></script>
+    <!-- 次にCameraProcessorを読み込む -->
+    <script src="camera-processor.js"></script>
+    <!-- 最後にメインアプリケーションを読み込む -->
+    <script src="app.js"></script>
+</body>
+</html>

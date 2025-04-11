@@ -1,0 +1,254 @@
+/* styles.css */
+body {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+    line-height: 1.6;
+}
+
+h1 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+h2 {
+    text-align: center;
+    margin: 30px 0 15px;
+    color: #444;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.video-container {
+    position: relative;
+    background-color: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    width: 100%;
+    max-width: 640px;
+    margin: 0 auto;
+}
+
+video, canvas {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+canvas.overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+}
+
+.controls {
+    display: flex;
+    justify-content: center;
+    margin: 20px 0;
+}
+
+button {
+    padding: 10px 20px;
+    font-size: 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 200px;
+    transition: background-color 0.3s;
+}
+
+button.start {
+    background-color: #4CAF50;
+    color: white;
+}
+
+button.stop {
+    background-color: #f44336;
+    color: white;
+}
+
+.heart-rate-display {
+    background-color: #e3f2fd;
+    border: 1px solid #90caf9;
+    color: #0d47a1;
+    padding: 15px;
+    border-radius: 8px;
+    text-align: center;
+    margin: 20px 0;
+}
+
+.heart-rate {
+    font-size: 32px;
+    font-weight: bold;
+}
+
+.graph-section {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.two-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.graph-container {
+    margin: 0;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 10px;
+}
+
+.graph-title {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.graph {
+    height: 150px;
+    width: 100%;
+    background-color: #f5f5f5;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid #ddd;
+}
+
+.scatter-plot {
+    height: 300px;
+    background-color: #f9f9f9;
+}
+
+.graph-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #666;
+}
+
+.instructions {
+    background-color: #fff9c4;
+    border: 1px solid #ffeb3b;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 20px 0;
+}
+
+.instructions ol {
+    margin-left: 20px;
+}
+
+.instructions .disclaimer {
+    font-size: 12px;
+    color: #666;
+    margin-top: 10px;
+}
+
+.error-message {
+    background-color: #ffebee;
+    border: 1px solid #ef9a9a;
+    color: #c62828;
+    padding: 10px;
+    border-radius: 4px;
+    margin: 10px 0;
+    display: none;
+}
+
+.camera-select {
+    margin: 10px 0;
+}
+
+select {
+    width: 100%;
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+.ppg-bar, .rri-bar, .value-bar {
+    position: absolute;
+    bottom: 0;
+    width: 2px;
+}
+
+.ppg-bar {
+    background-color: #f44336;
+}
+
+.rri-bar {
+    background-color: #2196F3;
+}
+
+.lf-bar {
+    background-color: #ff9800;
+}
+
+.hf-bar {
+    background-color: #4CAF50;
+}
+
+.lfia-bar {
+    background-color: #9c27b0;
+}
+
+.hfia-bar {
+    background-color: #00bcd4;
+}
+
+.scatter-point {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background-color: #3f51b5;
+    border-radius: 50%;
+    transform: translate(-3px, -3px);
+}
+
+.debug-container {
+    margin-top: 20px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #f9f9f9;
+    display: none;
+}
+
+.debug-toggle {
+    background-color: #eee;
+    color: #333;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-block;
+    margin-top: 10px;
+    font-size: 12px;
+}
+
+.advanced-analysis-section {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 30px;
+    background-color: #fafafa;
+}
+
+@media (max-width: 768px) {
+    .two-columns {
+        grid-template-columns: 1fr;
+    }
+}
