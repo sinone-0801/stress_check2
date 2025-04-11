@@ -15,6 +15,7 @@ class SignalProcessor {
         this.ENVELOPE_WINDOW_SIZE = 30;    // 瞬時振幅計算の時間窓サイズ (サンプル数)
         this.SMOOTHING_WINDOW_SIZE = 15;   // 振幅スムージングの窓サイズ (サンプル数)
         this.AVERAGING_WINDOW_SIZE = 30;   // 移動平均の窓サイズ (サンプル数)
+        this.MAX_PPG_VALUE = 255;  // PPG信号の最大値（赤色成分のサチュレーション対策）
 
         // バッファ
         this.ppgBuffer = [];     // PPG信号バッファ
@@ -40,8 +41,11 @@ class SignalProcessor {
      * @returns {Object} 解析結果
      */
     addDataPoint(ppgValue, timestamp) {
+        // サチュレーション対策：最大値でクリップ
+        const clippedValue = Math.min(ppgValue, this.MAX_PPG_VALUE);
+        
         // バッファにデータを追加
-        this.ppgBuffer.push(ppgValue);
+        this.ppgBuffer.push(clippedValue);
         this.timeBuffer.push(timestamp);
         
         // バッファサイズを制限

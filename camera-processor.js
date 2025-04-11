@@ -113,6 +113,26 @@ class CameraProcessor {
             this.canvasElement.width = this.videoElement.videoWidth;
             this.canvasElement.height = this.videoElement.videoHeight;
             
+            // カメラのライト（トーチ）をサポートしている場合は点灯
+            try {
+                const videoTrack = stream.getVideoTracks()[0];
+                const capabilities = videoTrack.getCapabilities();
+                
+                // トーチ機能をサポートしているか確認
+                if (capabilities.torch) {
+                    // トーチを点灯
+                    await videoTrack.applyConstraints({
+                        advanced: [{ torch: true }]
+                    });
+                    console.log('カメラライトを点灯しました');
+                } else {
+                    console.log('このデバイスはカメラライト機能をサポートしていません');
+                }
+            } catch (err) {
+                console.log('カメラライトの制御中にエラーが発生しました:', err);
+                // ライトの制御に失敗してもカメラ機能自体は継続
+            }
+            
             return true;
         } catch (err) {
             console.error('カメラの起動に失敗しました:', err);
