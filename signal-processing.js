@@ -12,7 +12,10 @@ class SignalProcessor {
         this.HF_MIN = 0.15;    // HF帯域の下限 (Hz)
         this.HF_MAX = 0.4;     // HF帯域の上限 (Hz)
         this.MAX_WINDOW_SIZE = 300; // 最大ウィンドウサイズ (サンプル数)
-        
+        this.ENVELOPE_WINDOW_SIZE = 30;    // 瞬時振幅計算の時間窓サイズ (サンプル数)
+        this.SMOOTHING_WINDOW_SIZE = 15;   // 振幅スムージングの窓サイズ (サンプル数)
+        this.AVERAGING_WINDOW_SIZE = 30;   // 移動平均の窓サイズ (サンプル数)
+
         // バッファ
         this.ppgBuffer = [];     // PPG信号バッファ
         this.timeBuffer = [];    // タイムスタンプバッファ
@@ -251,23 +254,74 @@ class SignalProcessor {
         
         return output;
     }
-    
+        
     /**
-     * 瞬時振幅を計算（簡易版）
+     * 包絡線検出による振幅計算（改良版：時間窓を可変に）
+     * @param {Array} signal - 入力信号
+     * @param {number} windowSize - ウィンドウサイズ（サンプル数）
+     * @returns {Array} 瞬時振幅
+     */
+    calculateEnvelope(signal, windowSize = this.ENVELOPE_WINDOW_SIZE) {
+        if (!signal || signal.length === 0) return [];
+        
+        const n = signal.length;
+        const envelope = new Array(n);
+        
+        // 窓サイズを検証
+        const actualWindowSize = Math.min(windowSize, Math.floor(n / 2));
+        
+        for (let i = 0; i < n; i++) {
+            let maxVal = 0;
+            let sum = 0;
+            let count = 0;
+            
+            // 前後のウィンドウで振幅を計算
+            const rawValues = [];
+            for (let j = Math.max(0, i - actualWindowSize); j <= Math.min(n - 1, i + actualWindowSize); j++) {
+                const absVal = Math.abs(signal[j]);
+                if (isFinite(absVal) && !isNaN(absVal)) {
+                    rawValues.push(absVal);
+                    maxVal = Math.max(maxVal, absVal);
+                }
+            }
+            
+            // 平均絶対値と最大値の組み合わせ（より安定した振幅計算）
+            let meanVal = 0;
+            if (rawValues.length > 0) {
+                // 計算した値を昇順にソート
+                const sortedValues = [...rawValues].sort((a, b) => a - b);
+                // 上位と下位各20%を除外
+                const startIndex = Math.floor(sortedValues.length * 0.2);
+                const endIndex = Math.floor(sortedValues.length * 0.8);
+                const validValues = sortedValues.slice(startIndex, endIndex);
+                // 平均値を計算
+                meanVal = validValues.length > 0 ? 
+                    validValues.reduce((sum, val) => sum + val, 0) / validValues.length : 0;
+            }
+            envelope[i] = 0.7 * maxVal + 0.3 * meanVal;  // 加重平均
+        }
+        
+        // 平滑化
+        return this.smoothSignal(envelope, this.SMOOTHING_WINDOW_SIZE);
+    }
+
+    /**
+     * 瞬時振幅を計算（改良版）
      */
     calculateInstantaneousAmplitude() {
-        if (this.lfBuffer.length < 30 || this.hfBuffer.length < 30) {
+        if (this.lfBuffer.length < this.ENVELOPE_WINDOW_SIZE * 2 || 
+            this.hfBuffer.length < this.ENVELOPE_WINDOW_SIZE * 2) {
             return;
         }
         
         try {
-            // より単純な包絡線検出法を使用
-            const rawLfia = this.calculateEnvelope(this.lfBuffer);
-            const rawHfia = this.calculateEnvelope(this.hfBuffer);
+            // より安定した包絡線検出を使用
+            const rawLfia = this.calculateEnvelope(this.lfBuffer, this.ENVELOPE_WINDOW_SIZE);
+            const rawHfia = this.calculateEnvelope(this.hfBuffer, this.ENVELOPE_WINDOW_SIZE);
             
-            // 平滑化
-            const smoothedLfia = this.smoothSignal(rawLfia, 5);
-            const smoothedHfia = this.smoothSignal(rawHfia, 5);
+            // 振幅の移動平均（より安定性を向上）
+            const smoothedLfia = this.calculateMovingAverage(rawLfia, this.AVERAGING_WINDOW_SIZE);
+            const smoothedHfia = this.calculateMovingAverage(rawHfia, this.AVERAGING_WINDOW_SIZE);
             
             // バッファに追加
             this.lfiaBuffer = smoothedLfia;
@@ -288,88 +342,171 @@ class SignalProcessor {
             }
         }
     }
-    
+
     /**
-     * 包絡線検出による振幅計算（シンプルな方法）
-     * @param {Array} signal - 入力信号
-     * @returns {Array} 瞬時振幅
+     * 移動平均を計算（長い時間窓用）
+     * @param {Array} data - 入力データ
+     * @param {number} windowSize - ウィンドウサイズ
+     * @returns {Array} 移動平均後のデータ
      */
-    calculateEnvelope(signal) {
-        const n = signal.length;
-        const envelope = new Array(n);
+    calculateMovingAverage(data, windowSize) {
+        if (!data || data.length === 0) return [];
         
-        // ピーク検出による包絡線計算
-        const windowSize = Math.min(5, Math.floor(n / 4));
+        const n = data.length;
+        const result = new Array(n);
         
         for (let i = 0; i < n; i++) {
-            let maxVal = Math.abs(signal[i]);
+            let sum = 0;
+            let count = 0;
             
-            // 周囲のウィンドウでの最大値を探す
-            for (let j = Math.max(0, i - windowSize); j <= Math.min(n - 1, i + windowSize); j++) {
-                const absVal = Math.abs(signal[j]);
-                if (absVal > maxVal) {
-                    maxVal = absVal;
+            // 中心を基準とした対称なウィンドウ
+            const halfWindow = Math.floor(windowSize / 2);
+            
+            for (let j = Math.max(0, i - halfWindow); j <= Math.min(n - 1, i + halfWindow); j++) {
+                if (isFinite(data[j]) && !isNaN(data[j])) {
+                    // 距離に基づく重み付け（中心に近いほど重み大）
+                    const weight = 1 - Math.abs(i - j) / (halfWindow + 1);
+                    sum += data[j] * weight;
+                    count += weight;
                 }
             }
             
-            envelope[i] = maxVal;
+            result[i] = count > 0 ? sum / count : 0;
         }
         
-        // 平滑化
-        return this.smoothSignal(envelope, 3);
+        return result;
     }
     
     /**
-     * 振幅の正規化とスケーリング（簡易版）
+     * 振幅の正規化とスケーリング（改良版）
      */
     normalizeAndScaleAmplitudes() {
         if (this.lfiaBuffer.length === 0 || this.hfiaBuffer.length === 0) {
             return;
         }
 
-        // 最小値と最大値を取得
-        let lfMin = Infinity;
-        let lfMax = -Infinity;
-        let hfMin = Infinity;
-        let hfMax = -Infinity;
-        
-        // 有効な値だけを考慮
-        for (let i = 0; i < this.lfiaBuffer.length; i++) {
-            const lfVal = this.lfiaBuffer[i];
-            if (isFinite(lfVal) && !isNaN(lfVal)) {
-                lfMin = Math.min(lfMin, lfVal);
-                lfMax = Math.max(lfMax, lfVal);
+        try {
+            // 急激な変化を防ぐために過去の値も考慮
+            // 静的な参照値の導入
+            const DEFAULT_LF_MIN = 0.1;
+            const DEFAULT_LF_MAX = 2.0;
+            const DEFAULT_HF_MIN = 0.05;
+            const DEFAULT_HF_MAX = 1.5;
+
+            // 最小値と最大値を静的な値から初期化（安定性のため）
+            let lfMin = DEFAULT_LF_MIN;
+            let lfMax = DEFAULT_LF_MAX;
+            let hfMin = DEFAULT_HF_MIN;
+            let hfMax = DEFAULT_HF_MAX;
+
+            // 有効な値だけを考慮
+            const validLfValues = [];
+            const validHfValues = [];
+            
+            for (let i = 0; i < this.lfiaBuffer.length; i++) {
+                const lfVal = this.lfiaBuffer[i];
+                if (isFinite(lfVal) && !isNaN(lfVal) && lfVal > 0) {
+                    validLfValues.push(lfVal);
+                }
             }
-        }
-        
-        for (let i = 0; i < this.hfiaBuffer.length; i++) {
-            const hfVal = this.hfiaBuffer[i];
-            if (isFinite(hfVal) && !isNaN(hfVal)) {
-                hfMin = Math.min(hfMin, hfVal);
-                hfMax = Math.max(hfMax, hfVal);
+            
+            for (let i = 0; i < this.hfiaBuffer.length; i++) {
+                const hfVal = this.hfiaBuffer[i];
+                if (isFinite(hfVal) && !isNaN(hfVal) && hfVal > 0) {
+                    validHfValues.push(hfVal);
+                }
             }
-        }
-        
-        // 範囲の確認と調整
-        if (!isFinite(lfMin) || !isFinite(lfMax) || lfMax - lfMin < 0.001) {
-            lfMin = 0;
-            lfMax = 1;
-        }
-        
-        if (!isFinite(hfMin) || !isFinite(hfMax) || hfMax - hfMin < 0.001) {
-            hfMin = 0;
-            hfMax = 1;
-        }
-        
-        // スケーリング
-        for (let i = 0; i < this.lfiaBuffer.length; i++) {
-            const normalized = (this.lfiaBuffer[i] - lfMin) / (lfMax - lfMin);
-            this.lfiaBuffer[i] = normalized * 60; // LFiAを0-60にスケーリング
-        }
-        
-        for (let i = 0; i < this.hfiaBuffer.length; i++) {
-            const normalized = (this.hfiaBuffer[i] - hfMin) / (hfMax - hfMin);
-            this.hfiaBuffer[i] = normalized * 50; // HFiAを0-50にスケーリング
+            
+            // 十分なデータがある場合のみ最小値と最大値を更新
+            if (validLfValues.length > 5) {
+                // 外れ値に影響されにくいように5-95パーセンタイルを使用
+                validLfValues.sort((a, b) => a - b);
+                const lowerIdx = Math.floor(validLfValues.length * 0.05);
+                const upperIdx = Math.floor(validLfValues.length * 0.95);
+                
+                lfMin = validLfValues[lowerIdx];
+                lfMax = validLfValues[upperIdx];
+            }
+            
+            if (validHfValues.length > 5) {
+                validHfValues.sort((a, b) => a - b);
+                const lowerIdx = Math.floor(validHfValues.length * 0.05);
+                const upperIdx = Math.floor(validHfValues.length * 0.95);
+                
+                hfMin = validHfValues[lowerIdx];
+                hfMax = validHfValues[upperIdx];
+            }
+            
+            // 範囲の確認と調整（最小幅を確保）
+            if (lfMax - lfMin < 0.1) {
+                const mid = (lfMax + lfMin) / 2;
+                lfMin = mid - 0.05;
+                lfMax = mid + 0.05;
+            }
+            
+            if (hfMax - hfMin < 0.1) {
+                const mid = (hfMax + hfMin) / 2;
+                hfMin = mid - 0.05;
+                hfMax = mid + 0.05;
+            }
+            
+            // 安定化のために、値が大きく変動しないようにする
+            // 前回の値との混合比率
+            const ALPHA = 0.3; // 新しい値の重み（0-1）
+            
+            // クラス変数として前回の値を保持
+            if (!this.prevLfMin) this.prevLfMin = lfMin;
+            if (!this.prevLfMax) this.prevLfMax = lfMax;
+            if (!this.prevHfMin) this.prevHfMin = hfMin;
+            if (!this.prevHfMax) this.prevHfMax = hfMax;
+            
+            // 前回の値と現在の値の加重平均
+            lfMin = this.prevLfMin * (1 - ALPHA) + lfMin * ALPHA;
+            lfMax = this.prevLfMax * (1 - ALPHA) + lfMax * ALPHA;
+            hfMin = this.prevHfMin * (1 - ALPHA) + hfMin * ALPHA;
+            hfMax = this.prevHfMax * (1 - ALPHA) + hfMax * ALPHA;
+            
+            // 値を保存
+            this.prevLfMin = lfMin;
+            this.prevLfMax = lfMax;
+            this.prevHfMin = hfMin;
+            this.prevHfMax = hfMax;
+            
+            // スケーリング
+            const scaledLfiaBuffer = new Array(this.lfiaBuffer.length);
+            const scaledHfiaBuffer = new Array(this.hfiaBuffer.length);
+            
+            for (let i = 0; i < this.lfiaBuffer.length; i++) {
+                const val = this.lfiaBuffer[i];
+                if (isFinite(val) && !isNaN(val)) {
+                    const normalized = (val - lfMin) / (lfMax - lfMin);
+                    // 0-60の範囲にスケーリングし、値が範囲外の場合はクリップ
+                    scaledLfiaBuffer[i] = Math.max(0, Math.min(60, normalized * 60));
+                } else {
+                    scaledLfiaBuffer[i] = 30; // デフォルト値
+                }
+            }
+            
+            for (let i = 0; i < this.hfiaBuffer.length; i++) {
+                const val = this.hfiaBuffer[i];
+                if (isFinite(val) && !isNaN(val)) {
+                    const normalized = (val - hfMin) / (hfMax - hfMin);
+                    // 0-50の範囲にスケーリングし、値が範囲外の場合はクリップ
+                    scaledHfiaBuffer[i] = Math.max(0, Math.min(50, normalized * 50));
+                } else {
+                    scaledHfiaBuffer[i] = 25; // デフォルト値
+                }
+            }
+            
+            // バッファを更新
+            this.lfiaBuffer = scaledLfiaBuffer;
+            this.hfiaBuffer = scaledHfiaBuffer;
+            
+        } catch (error) {
+            console.error("振幅の正規化中にエラーが発生しました:", error);
+            // エラー時のフォールバック値
+            this.lfiaBuffer = this.lfiaBuffer.map(() => 30);
+            this.hfiaBuffer = this.hfiaBuffer.map(() => 25);
         }
     }
     

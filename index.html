@@ -52,6 +52,55 @@
             </div>
         </div>
         
+        <div class="advanced-settings">
+            <h3>詳細設定 <button id="toggle-settings" class="toggle-button">設定を表示</button></h3>
+            
+            <div id="settings-panel" class="settings-panel" style="display: none;">
+                <div class="settings-group">
+                    <h4>信号処理設定</h4>
+                    
+                    <div class="setting-item">
+                        <label for="envelope-window">瞬時振幅計算の時間窓:</label>
+                        <input type="range" id="envelope-window" min="5" max="30" value="15" class="slider">
+                        <span id="envelope-window-value">15</span>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="smoothing-window">振幅スムージング窓:</label>
+                        <input type="range" id="smoothing-window" min="3" max="20" value="10" class="slider">
+                        <span id="smoothing-window-value">10</span>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="averaging-window">振幅平均化窓:</label>
+                        <input type="range" id="averaging-window" min="5" max="50" value="20" class="slider">
+                        <span id="averaging-window-value">20</span>
+                    </div>
+                </div>
+                
+                <div class="settings-group">
+                    <h4>ピーク検出設定</h4>
+                    
+                    <div class="setting-item">
+                        <label for="peak-threshold">ピーク検出閾値:</label>
+                        <input type="range" id="peak-threshold" min="20" max="80" value="50" class="slider">
+                        <span id="peak-threshold-value">50</span>%
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="min-peak-distance">最小ピーク間隔:</label>
+                        <input type="range" id="min-peak-distance" min="200" max="400" value="250" step="10" class="slider">
+                        <span id="min-peak-distance-value">250</span> ms
+                    </div>
+                </div>
+                
+                <div class="settings-actions">
+                    <button id="apply-settings" class="apply-button">設定を適用</button>
+                    <button id="reset-settings" class="reset-button">デフォルトに戻す</button>
+                </div>
+            </div>
+        </div>
+        
         <div class="advanced-analysis-section">
             <h2>高度な解析</h2>
             <div class="graph-section two-columns">

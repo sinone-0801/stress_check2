@@ -534,6 +534,144 @@ document.addEventListener('DOMContentLoaded', function() {
         q4Label.style.bottom = '25%';
         scatterGraph.appendChild(q4Label);
     }
+
+    // 設定パネルの初期化
+    function initializeSettingsPanel() {
+        // DOM要素の取得
+        const toggleSettingsBtn = document.getElementById('toggle-settings');
+        const settingsPanel = document.getElementById('settings-panel');
+        const applySettingsBtn = document.getElementById('apply-settings');
+        const resetSettingsBtn = document.getElementById('reset-settings');
+        
+        // スライダー要素
+        const envelopeWindowSlider = document.getElementById('envelope-window');
+        const smoothingWindowSlider = document.getElementById('smoothing-window');
+        const averagingWindowSlider = document.getElementById('averaging-window');
+        const peakThresholdSlider = document.getElementById('peak-threshold');
+        const minPeakDistanceSlider = document.getElementById('min-peak-distance');
+        
+        // 値表示要素
+        const envelopeWindowValue = document.getElementById('envelope-window-value');
+        const smoothingWindowValue = document.getElementById('smoothing-window-value');
+        const averagingWindowValue = document.getElementById('averaging-window-value');
+        const peakThresholdValue = document.getElementById('peak-threshold-value');
+        const minPeakDistanceValue = document.getElementById('min-peak-distance-value');
+        
+        // パネルの表示/非表示
+        toggleSettingsBtn.addEventListener('click', function() {
+            if (settingsPanel.style.display === 'none') {
+                settingsPanel.style.display = 'block';
+                toggleSettingsBtn.textContent = '設定を隠す';
+            } else {
+                settingsPanel.style.display = 'none';
+                toggleSettingsBtn.textContent = '設定を表示';
+            }
+        });
+        
+        // スライダー値の表示更新
+        envelopeWindowSlider.addEventListener('input', function() {
+            envelopeWindowValue.textContent = this.value;
+        });
+        
+        smoothingWindowSlider.addEventListener('input', function() {
+            smoothingWindowValue.textContent = this.value;
+        });
+        
+        averagingWindowSlider.addEventListener('input', function() {
+            averagingWindowValue.textContent = this.value;
+        });
+        
+        peakThresholdSlider.addEventListener('input', function() {
+            peakThresholdValue.textContent = this.value;
+        });
+        
+        minPeakDistanceSlider.addEventListener('input', function() {
+            minPeakDistanceValue.textContent = this.value;
+        });
+        
+        // 設定を適用
+        applySettingsBtn.addEventListener('click', function() {
+            // シグナルプロセッサの設定を更新
+            if (cameraProcessor && cameraProcessor.signalProcessor) {
+                const processor = cameraProcessor.signalProcessor;
+                
+                // 瞬時振幅計算の設定を更新
+                processor.ENVELOPE_WINDOW_SIZE = parseInt(envelopeWindowSlider.value);
+                processor.SMOOTHING_WINDOW_SIZE = parseInt(smoothingWindowSlider.value);
+                processor.AVERAGING_WINDOW_SIZE = parseInt(averagingWindowSlider.value);
+                
+                // カメラプロセッサの設定を更新
+                cameraProcessor.MIN_PEAK_DISTANCE_MS = parseInt(minPeakDistanceSlider.value);
+                cameraProcessor.PEAK_THRESHOLD_PERCENT = parseInt(peakThresholdSlider.value);
+                
+                // 設定を適用したことを通知
+                showNotification("設定を適用しました");
+            }
+        });
+        
+        // 設定をリセット
+        resetSettingsBtn.addEventListener('click', function() {
+            // スライダーをデフォルト値に戻す
+            envelopeWindowSlider.value = 15;
+            smoothingWindowSlider.value = 10;
+            averagingWindowSlider.value = 20;
+            peakThresholdSlider.value = 50;
+            minPeakDistanceSlider.value = 250;
+            
+            // 表示値も更新
+            envelopeWindowValue.textContent = "15";
+            smoothingWindowValue.textContent = "10";
+            averagingWindowValue.textContent = "20";
+            peakThresholdValue.textContent = "50";
+            minPeakDistanceValue.textContent = "250";
+            
+            // 設定を適用
+            applySettingsBtn.click();
+        });
+    }
+
+    // 通知を表示する関数
+    function showNotification(message) {
+        // 既存の通知を削除
+        const existingNotification = document.querySelector('.notification');
+        if (existingNotification) {
+            existingNotification.remove();
+        }
+        
+        // 新しい通知を作成
+        const notification = document.createElement('div');
+        notification.className = 'notification';
+        notification.textContent = message;
+        
+        // スタイル設定
+        notification.style.position = 'fixed';
+        notification.style.bottom = '20px';
+        notification.style.right = '20px';
+        notification.style.backgroundColor = '#4CAF50';
+        notification.style.color = 'white';
+        notification.style.padding = '10px 20px';
+        notification.style.borderRadius = '4px';
+        notification.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+        notification.style.zIndex = '1000';
+        notification.style.opacity = '0';
+        notification.style.transition = 'opacity 0.3s ease';
+        
+        // ドキュメントに追加
+        document.body.appendChild(notification);
+        
+        // フェードイン
+        setTimeout(() => {
+            notification.style.opacity = '1';
+        }, 10);
+        
+        // 3秒後に消去
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            setTimeout(() => {
+                notification.remove();
+            }, 300);
+        }, 3000);
+    }
     
     // フレームレートを更新
     function updateFrameRate(fps) {
@@ -567,4 +705,5 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 初期化
     getDevices();
+    initializeSettingsPanel();
 });
