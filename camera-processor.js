@@ -32,12 +32,13 @@ class CameraProcessor {
         this.onPeakDetected = null;
         
         // 設定値
-        this.MIN_PEAK_DISTANCE_MS = 300;  // 最小ピーク間距離（ミリ秒）
-        this.RRI_MIN_MS = 600;            // 最小RRI（ミリ秒）
-        this.RRI_MAX_MS = 1200;           // 最大RRI（ミリ秒）
+        this.MIN_PEAK_DISTANCE_MS = 250;  // 最小ピーク間距離（ミリ秒）240BPM相当
+        this.RRI_MIN_MS = 300;            // 最小RRI（ミリ秒）200BPM相当
+        this.RRI_MAX_MS = 1500;           // 最大RRI（ミリ秒）40BPM相当
         this.PEAK_WINDOW_SIZE = 10;       // ピーク検出ウィンドウサイズ
         this.MAX_PPG_SAMPLES = 100;       // 最大PPGサンプル数
-        
+        this.SAMPLE_RATE = 30;            // 推定サンプルレート（カメラのフレームレート
+
         // 信号処理
         this.signalProcessor = new SignalProcessor();
     }
@@ -163,6 +164,38 @@ class CameraProcessor {
     }
     
     /**
+     * PPG信号の前処理を強化するメソッド
+     * @param {Array} rawPpgData - 生のPPGデータ
+     * @returns {Array} 前処理済みのPPGデータ
+     */
+    preprocessPpgSignal(rawPpgData) {
+        if (rawPpgData.length < 3) return [...rawPpgData];
+        
+        // ステップ1: 移動平均フィルタで高周波ノイズを除去
+        let filteredPpg = this.signalProcessor.movingAverage(rawPpgData, 5);
+        
+        // ステップ2: トレンド除去（信号プロセッサのメソッドを利用）
+        const mean = filteredPpg.reduce((sum, val) => sum + val, 0) / filteredPpg.length;
+        const centeredSignal = filteredPpg.map(val => val - mean);
+        filteredPpg = this.signalProcessor.detrendSignal(centeredSignal);
+        
+        // ステップ3: 外れ値の除去（中央値絶対偏差法）
+        const median = this.signalProcessor.calculateMedian(filteredPpg);
+        const mad = this.signalProcessor.calculateMAD(filteredPpg, median);
+        const threshold = 3.0; // 閾値（通常は2.5-3.5）
+        
+        filteredPpg = filteredPpg.map(val => {
+            const z = Math.abs(val - median) / (mad || 1);
+            return z > threshold ? median : val;
+        });
+        
+        // ステップ4: 再度スムージング
+        filteredPpg = this.signalProcessor.movingAverage(filteredPpg, 3);
+        
+        return filteredPpg;
+    }
+
+    /**
      * フレームレートを計算
      */
     calculateFrameRate() {
@@ -208,48 +241,74 @@ class CameraProcessor {
         const data = frame.data;
         const length = data.length;
         
-        // 赤チャンネルの平均値を計算（指の透過光を分析）
+        // 指の検出（赤要素が強い領域のみを分析）
+        let validPixelCount = 0;
         let redSum = 0;
+        
+        // 指の検出のための閾値
+        const RED_THRESHOLD = 100;
+        const RED_DOMINANCE = 1.2; // 赤が他のチャンネルより20%以上強い
+        
         for (let i = 0; i < length; i += 4) {
-            redSum += data[i]; // 赤チャンネル
+            const r = data[i];     // 赤
+            const g = data[i + 1]; // 緑
+            const b = data[i + 2]; // 青
+            
+            // 指の組織を検出（赤が強く、他の色よりも優勢）
+            if (r > RED_THRESHOLD && r > g * RED_DOMINANCE && r > b * RED_DOMINANCE) {
+                redSum += r;
+                validPixelCount++;
+            }
         }
         
-        const redAvg = redSum / (length / 4);
         const timestamp = Date.now();
         
-        // PPGデータを保存
-        this.ppgData.push(redAvg);
-        this.timeValues.push(timestamp);
-        
-        // 最新のMAX_PPG_SAMPLESサンプルだけを保持
-        if (this.ppgData.length > this.MAX_PPG_SAMPLES) {
-            this.ppgData.shift();
-            this.timeValues.shift();
+        // 有効なピクセルが十分にある場合のみ処理
+        if (validPixelCount > 100) {
+            const redAvg = redSum / validPixelCount;
+            
+            // PPGデータを保存
+            this.ppgData.push(redAvg);
+            this.timeValues.push(timestamp);
+            
+            // 最新のMAX_PPG_SAMPLESサンプルだけを保持
+            if (this.ppgData.length > this.MAX_PPG_SAMPLES) {
+                this.ppgData.shift();
+                this.timeValues.shift();
+            }
+            
+            // 信号の前処理（新しく追加したメソッド）
+            if (this.ppgData.length > 10) {
+                const processedPpg = this.preprocessPpgSignal([...this.ppgData]);
+                
+                // PPGデータをコールバックで通知
+                if (this.onPpgUpdate) {
+                    this.onPpgUpdate(processedPpg, this.timeValues);
+                }
+                
+                // 信号処理を実行
+                this.signalProcessor.addDataPoint(redAvg, timestamp);
+                
+                // ピーク検出（改良したアルゴリズム）
+                this.detectPeaks();
+            }
+        } else {
+            // 有効なピクセルが少なすぎる場合（指が検出されていない）
+            console.log("指が検出されていません。カメラに指を近づけてください。");
         }
-        
-        // PPGデータをコールバックで通知
-        if (this.onPpgUpdate) {
-            this.onPpgUpdate(this.ppgData, this.timeValues);
-        }
-        
-        // 信号処理を実行
-        const processingResult = this.signalProcessor.addDataPoint(redAvg, timestamp);
-        
-        // ピーク検出（アルゴリズム1の実装）
-        this.detectPeaks();
         
         // 次のフレームを処理
         this.animationFrame = requestAnimationFrame(() => this.processFrame());
     }
     
     /**
-     * ピーク検出処理
+     * ピーク検出処理（改良版）
      */
     detectPeaks() {
         // 少なくともPEAK_WINDOW_SIZE+1サンプルが必要
         if (this.ppgData.length > this.PEAK_WINDOW_SIZE) {
-            // 移動平均を適用して信号をスムーズにする
-            const smoothedPpg = this.signalProcessor.movingAverage(this.ppgData, 3);
+            // 移動平均を適用して信号をスムーズにする - 窓サイズを大きくして5に
+            const smoothedPpg = this.signalProcessor.movingAverage(this.ppgData, 5);
             
             // 現在の点がピークかどうか検出
             const currentIndex = smoothedPpg.length - this.PEAK_WINDOW_SIZE;
@@ -267,11 +326,29 @@ class CameraProcessor {
                     }
                 }
                 
+                // 振幅の閾値を確認（ノイズ除去のため）
+                if (isPeak) {
+                    // 過去30秒のデータから振幅の閾値を計算
+                    const recentPpg = smoothedPpg.slice(-Math.min(smoothedPpg.length, 30 * this.SAMPLE_RATE));
+                    const min = Math.min(...recentPpg);
+                    const max = Math.max(...recentPpg);
+                    // 閾値を50%に引き上げ（より明確なピークのみを検出）
+                    const threshold = min + (max - min) * 0.5;
+                    
+                    // 閾値未満のピークは無視
+                    if (currentPoint < threshold) {
+                        isPeak = false;
+                    }
+                }
+                
                 // 前回のピークから一定時間経過しているか確認
                 const currentTime = this.timeValues[currentIndex];
                 const timeSinceLastPeak = currentTime - this.lastPeakTime;
                 
-                if (isPeak && timeSinceLastPeak > this.MIN_PEAK_DISTANCE_MS) {
+                // 最小ピーク間隔を240BPMに基づいて設定（60000 / 240 = 250ms）
+                const MIN_PEAK_INTERVAL_MS = 250;
+                
+                if (isPeak && timeSinceLastPeak > MIN_PEAK_INTERVAL_MS) {
                     // ピークを検出
                     this.peaks.push(currentTime);
                     this.lastPeakTime = currentTime;
@@ -285,9 +362,15 @@ class CameraProcessor {
                     if (this.peaks.length > 1) {
                         const newRri = this.peaks[this.peaks.length - 1] - this.peaks[this.peaks.length - 2];
                         
-                        // RRIが妥当な範囲内か確認
-                        if (newRri >= this.RRI_MIN_MS && newRri <= this.RRI_MAX_MS) {
+                        // RRIが妥当な範囲内か確認（40BPM-200BPMの範囲に制限）
+                        const RRI_MIN_MS = 300;  // 200BPM相当
+                        const RRI_MAX_MS = 1500; // 40BPM相当
+                        
+                        if (newRri >= RRI_MIN_MS && newRri <= RRI_MAX_MS) {
                             this.rriData.push(newRri);
+                            
+                            // RRIデータをシグナルプロセッサに渡してHRV解析の精度を上げる
+                            this.signalProcessor.addRriData(newRri, currentTime);
                             
                             // RRIデータをコールバックで通知
                             if (this.onRriUpdate) {

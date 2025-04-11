@@ -1,4 +1,4 @@
-/* styles.css */
+/* styles.css (修正版) */
 body {
     font-family: 'Helvetica Neue', Arial, sans-serif;
     max-width: 900px;
@@ -180,7 +180,8 @@ label {
     font-weight: bold;
 }
 
-.ppg-bar, .rri-bar, .value-bar {
+/* グラフ表示用のスタイル修正 */
+.ppg-bar, .rri-bar {
     position: absolute;
     bottom: 0;
     width: 2px;
@@ -194,29 +195,44 @@ label {
     background-color: #2196F3;
 }
 
+/* 周波数帯域グラフのバー */
 .lf-bar {
+    position: absolute;
+    bottom: 0;
+    width: 4px;
     background-color: #ff9800;
 }
 
 .hf-bar {
+    position: absolute;
+    bottom: 0;
+    width: 4px;
     background-color: #4CAF50;
 }
 
 .lfia-bar {
+    position: absolute;
+    bottom: 0;
+    width: 4px;
     background-color: #9c27b0;
 }
 
 .hfia-bar {
+    position: absolute;
+    bottom: 0;
+    width: 4px;
     background-color: #00bcd4;
 }
 
+/* 散布図のポイント - 位置を明示的に絶対位置に */
 .scatter-point {
     position: absolute;
     width: 6px;
     height: 6px;
     background-color: #3f51b5;
     border-radius: 50%;
-    transform: translate(-3px, -3px);
+    /* 中心を合わせるための調整 */
+    transform: translate(-3px, 3px);
 }
 
 .debug-container {
@@ -251,4 +267,219 @@ label {
     .two-columns {
         grid-template-columns: 1fr;
     }
+}
+
+/* 散布図関連のスタイル追加 */
+.scatter-plot {
+    height: 300px;
+    background-color: #f9f9f9;
+    position: relative;
+    border: 1px solid #ddd;
+    box-sizing: border-box;
+}
+
+.scatter-point {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    transform: translate(-3px, 3px);
+}
+
+/* 散布図のグリッドラインと軸 */
+.scatter-grid-line {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.2);
+    z-index: 1;
+}
+
+.scatter-grid-line.horizontal {
+    width: 100%;
+    height: 1px;
+}
+
+.scatter-grid-line.vertical {
+    height: 100%;
+    width: 1px;
+}
+
+/* 軸ラベル */
+.scatter-axis-label {
+    position: absolute;
+    font-size: 12px;
+    color: #666;
+}
+
+.scatter-axis-label.x-axis {
+    bottom: 5px;
+    right: 5px;
+}
+
+.scatter-axis-label.y-axis {
+    top: 5px;
+    left: 5px;
+    transform: rotate(90deg);
+    transform-origin: left top;
+}
+
+/* 中心点ラベル */
+.scatter-center-label {
+    position: absolute;
+    font-size: 10px;
+    color: #333;
+    background-color: rgba(255, 255, 255, 0.7);
+    padding: 2px 4px;
+    border-radius: 2px;
+    transform: translate(-50%, 50%);
+    z-index: 2;
+}
+
+/* 象限の色サンプル表示用 */
+.quadrant-legend {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 5px;
+    padding: 5px;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+.quadrant-item {
+    display: flex;
+    align-items: center;
+}
+
+.quadrant-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 5px;
+}
+
+.q1-color { background-color: #f44336; }
+.q2-color { background-color: #ff9800; }
+.q3-color { background-color: #3f51b5; }
+.q4-color { background-color: #4CAF50; }
+
+/* 散布図関連の改良スタイル */
+.scatter-plot {
+    position: relative;
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.scatter-point {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    transform: translate(-3px, 3px);
+    opacity: 0.8;
+    transition: all 0.2s ease;
+}
+
+.scatter-grid-line {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.1);
+    z-index: 1;
+}
+
+.scatter-grid-line.horizontal {
+    width: 100%;
+    height: 1px;
+}
+
+.scatter-grid-line.vertical {
+    height: 100%;
+    width: 1px;
+}
+
+.scatter-axis-label {
+    position: absolute;
+    font-size: 12px;
+    color: #666;
+}
+
+.scatter-axis-label.x-axis {
+    bottom: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.scatter-axis-label.y-axis {
+    left: 5px;
+    bottom: 50%;
+    transform: translateY(50%) rotate(-90deg);
+    transform-origin: left center;
+}
+
+.scatter-center-label {
+    position: absolute;
+    font-size: 10px;
+    color: #666;
+    transform: translate(-50%, 50%);
+    background-color: rgba(255, 255, 255, 0.7);
+    padding: 2px 4px;
+    border-radius: 2px;
+}
+
+.quadrant-label {
+    position: absolute;
+    font-size: 10px;
+    font-weight: bold;
+    color: rgba(0, 0, 0, 0.6);
+    text-align: center;
+    background-color: rgba(255, 255, 255, 0.5);
+    padding: 2px 4px;
+    border-radius: 2px;
+}
+
+/* 象限の色に合わせる */
+.quadrant-label.q1 {
+    color: rgba(244, 67, 54, 0.8); /* 赤 */
+}
+
+.quadrant-label.q2 {
+    color: rgba(255, 152, 0, 0.8); /* オレンジ */
+}
+
+.quadrant-label.q3 {
+    color: rgba(63, 81, 181, 0.8); /* 青 */
+}
+
+.quadrant-label.q4 {
+    color: rgba(76, 175, 80, 0.8); /* 緑 */
+}
+
+/* ストレス状態表示 */
+.stress-state-display {
+    margin-top: 10px;
+    padding: 8px;
+    border-radius: 4px;
+    font-weight: bold;
+    text-align: center;
+    background-color: #f5f5f5;
+    transition: all 0.3s ease;
+}
+
+.state-rest {
+    background-color: rgba(63, 81, 181, 0.2);
+    color: #3f51b5;
+}
+
+.state-physical {
+    background-color: rgba(255, 152, 0, 0.2);
+    color: #ff9800;
+}
+
+.state-relaxation {
+    background-color: rgba(76, 175, 80, 0.2);
+    color: #4CAF50;
+}
+
+.state-mental {
+    background-color: rgba(244, 67, 54, 0.2);
+    color: #f44336;
 }

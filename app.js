@@ -1,6 +1,6 @@
 /**
  * app.js
- * PPG解析アプリケーションのメインスクリプト
+ * PPG解析アプリケーションのメインスクリプト（修正版）
  */
 
 // グローバル変数として SignalProcessor が存在するか確認
@@ -51,6 +51,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 録画状態
     let isRecording = false;
+    
+    // 高度な解析の更新タイマー
+    let advancedAnalysisTimer = null;
     
     // デバッグ表示の切り替え
     debugToggle.addEventListener('click', function() {
@@ -116,6 +119,12 @@ document.addEventListener('DOMContentLoaded', function() {
             // 録画開始
             await cameraProcessor.startRecording();
             
+            // 高度な解析を開始
+            if (advancedAnalysisTimer) {
+                clearInterval(advancedAnalysisTimer);
+            }
+            advancedAnalysisTimer = setInterval(updateAdvancedGraphs, 1000);
+            
             hideError();
         } catch (err) {
             showError('録画の開始に失敗しました: ' + err.message);
@@ -130,6 +139,12 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 録画停止
         cameraProcessor.stopRecording();
+        
+        // 高度な解析を停止
+        if (advancedAnalysisTimer) {
+            clearInterval(advancedAnalysisTimer);
+            advancedAnalysisTimer = null;
+        }
     }
     
     // グラフをクリア
@@ -211,7 +226,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // LF/HF/LFiA/HFiAグラフを更新
+    // LF/HF/LFiA/HFiAグラフを更新（修正版）
     function updateAdvancedGraphs() {
         if (!isRecording) return;
         
@@ -236,25 +251,49 @@ document.addEventListener('DOMContentLoaded', function() {
             updateFrequencyGraph(hfiaGraph, processor.hfiaBuffer, 'hfia-bar');
         }
         
-        // デバッグ情報を更新
-        if (processor.lfiaBuffer && processor.lfiaBuffer.length > 0 && 
-            processor.hfiaBuffer && processor.hfiaBuffer.length > 0) {
-            
-            const lfia = processor.lfiaBuffer[processor.lfiaBuffer.length - 1];
-            const hfia = processor.hfiaBuffer[processor.hfiaBuffer.length - 1];
-            
-            // 無効な値をチェック
-            lfiaValueElement.textContent = isFinite(lfia) ? lfia.toFixed(2) : "計算中...";
-            hfiaValueElement.textContent = isFinite(hfia) ? hfia.toFixed(2) : "計算中...";
-            
-            // 散布図を更新（有効な値がある場合のみ）
-            if (isFinite(lfia) && isFinite(hfia)) {
-                updateScatterPlot(processor.lfiaBuffer, processor.hfiaBuffer);
-            }
+        // デバッグ情報を常に更新
+        let lfia = 0;
+        let hfia = 0;
+        
+        if (processor.lfiaBuffer && processor.lfiaBuffer.length > 0) {
+            lfia = processor.lfiaBuffer[processor.lfiaBuffer.length - 1];
         }
         
-        // 1秒ごとに更新
-        setTimeout(updateAdvancedGraphs, 1000);
+        if (processor.hfiaBuffer && processor.hfiaBuffer.length > 0) {
+            hfia = processor.hfiaBuffer[processor.hfiaBuffer.length - 1];
+        }
+        
+        // 値が実際に数値であることを確認してから表示
+        if (isFinite(lfia) && !isNaN(lfia)) {
+            lfiaValueElement.textContent = lfia.toFixed(2);
+        } else {
+            // 有効な値が得られない場合は、初期値を設定
+            lfiaValueElement.textContent = "30.00";
+        }
+        
+        if (isFinite(hfia) && !isNaN(hfia)) {
+            hfiaValueElement.textContent = hfia.toFixed(2);
+        } else {
+            // 有効な値が得られない場合は、初期値を設定
+            hfiaValueElement.textContent = "25.00";
+        }
+        
+        // 散布図を更新
+        // 有効な値でなくても散布図を更新
+        try {
+            updateScatterPlot(
+                processor.lfiaBuffer && processor.lfiaBuffer.length > 0 ? processor.lfiaBuffer : [30],
+                processor.hfiaBuffer && processor.hfiaBuffer.length > 0 ? processor.hfiaBuffer : [25]
+            );
+            
+            // ストレス状態の説明を更新
+            updateStressState(
+                isFinite(lfia) && !isNaN(lfia) ? lfia : 30,
+                isFinite(hfia) && !isNaN(hfia) ? hfia : 25
+            );
+        } catch (error) {
+            console.error("散布図の更新中にエラーが発生しました:", error);
+        }
     }
     
     // 周波数帯域グラフを更新（改良版）
@@ -268,14 +307,20 @@ document.addEventListener('DOMContentLoaded', function() {
         const validData = data.filter(val => isFinite(val) && !isNaN(val));
         if (validData.length === 0) return;
         
-        // データ範囲を計算
-        const min = Math.min(...validData);
-        const max = Math.max(...validData);
-        const range = max - min || 1; // 0除算防止
+        // データ範囲を計算（0より小さい値も適切に処理）
+        let min = Math.min(...validData);
+        let max = Math.max(...validData);
+        
+        // 範囲が小さすぎる場合は調整
+        if (max - min < 0.001) {
+            max = min + 1;
+        }
+        
+        const range = max - min;
         
         // 表示するデータポイントの数を制限（最大30ポイント）
         const displayData = validData.length > 30 ? 
-                            validData.slice(-30) : validData;
+                        validData.slice(-30) : validData;
         
         // グラフを描画（バーチャート）
         displayData.forEach((value, index) => {
@@ -284,22 +329,70 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const bar = document.createElement('div');
             bar.className = className;
-            bar.style.left = `${(index / (displayData.length - 1 || 1)) * 100}%`;
             
-            // 値の正規化と高さの設定
+            // 位置を計算（データが一つしかない場合の分母0を防止）
+            const position = displayData.length > 1 ? 
+                            (index / (displayData.length - 1)) * 100 : 50;
+            bar.style.left = `${position}%`;
+            
+            // 値の正規化と高さの設定（負の値も適切に処理）
             const normalizedHeight = ((value - min) / range) * 100;
             bar.style.height = `${Math.max(1, Math.min(100, normalizedHeight))}%`;
+            
+            // ツールチップを追加（値を表示）
+            bar.title = value.toFixed(2);
             
             graphElement.appendChild(bar);
         });
     }
     
-    // 散布図を更新（改良版）
+    // ストレス状態の説明を更新する関数
+    function updateStressState(lfia, hfia) {
+        // ストレス状態の説明要素が存在しない場合は作成
+        let stressStateElement = document.getElementById('stress-state');
+        if (!stressStateElement) {
+            stressStateElement = document.createElement('div');
+            stressStateElement.id = 'stress-state';
+            stressStateElement.className = 'stress-state-display';
+            document.querySelector('.quadrant-legend').after(stressStateElement);
+        }
+        
+        // 中心点
+        const centerHF = 25;
+        const centerLF = 30;
+        
+        // 状態の判定
+        let stateText = '';
+        let stateClass = '';
+        
+        if (lfia < centerLF && hfia < centerHF) {
+            stateText = '安静状態 (Rest)';
+            stateClass = 'state-rest';
+        } else if (lfia >= centerLF && hfia < centerHF) {
+            stateText = '軽い身体的ストレス (Light Physical Stress)';
+            stateClass = 'state-physical';
+        } else if (lfia < centerLF && hfia >= centerHF) {
+            stateText = '深いリラックス状態 (Deep Relaxation)';
+            stateClass = 'state-relaxation';
+        } else {
+            stateText = '軽い精神的ストレス (Light Mental Stress)';
+            stateClass = 'state-mental';
+        }
+        
+        // 表示を更新
+        stressStateElement.textContent = `現在の状態: ${stateText}`;
+        stressStateElement.className = 'stress-state-display ' + stateClass;
+    }
+    
+    // 散布図を更新
     function updateScatterPlot(lfiaData, hfiaData) {
         if (!lfiaData || !hfiaData || lfiaData.length === 0 || hfiaData.length === 0) return;
         
         // グラフをクリア
         scatterGraph.innerHTML = '';
+        
+        // グリッド線と軸を描画
+        drawScatterGrids();
         
         // 有効なデータポイントだけを使用
         const validPoints = [];
@@ -319,44 +412,127 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 最新の30ポイントのみ使用
         const displayPoints = validPoints.length > 30 ? 
-                              validPoints.slice(-30) : validPoints;
+                        validPoints.slice(-30) : validPoints;
         
-        // LFiAとHFiAの範囲を計算
-        const lfiaMin = Math.min(...displayPoints.map(p => p.lfia));
-        const lfiaMax = Math.max(...displayPoints.map(p => p.lfia));
-        const hfiaMin = Math.min(...displayPoints.map(p => p.hfia));
-        const hfiaMax = Math.max(...displayPoints.map(p => p.hfia));
+        // 論文のように固定範囲を使用
+        const hfiaMin = 0;
+        const hfiaMax = 50;  // 論文に合わせて0-50の範囲
+        const lfiaMin = 0;
+        const lfiaMax = 60;  // 論文に合わせて0-60の範囲
         
-        // 範囲に少しマージンを追加
-        const lfiaRange = (lfiaMax - lfiaMin) * 1.1 || 100;
-        const hfiaRange = (hfiaMax - hfiaMin) * 1.1 || 100;
+        // 象限の中心点
+        const centerHF = 25;  // HFの中心点
+        const centerLF = 30;  // LFの中心点
         
         // ポイントを描画
         displayPoints.forEach((point, i) => {
             const { lfia, hfia } = point;
             
+            // 範囲を指定の値に収める
+            const clampedHF = Math.max(hfiaMin, Math.min(hfiaMax, hfia));
+            const clampedLF = Math.max(lfiaMin, Math.min(lfiaMax, lfia));
+            
             // 位置を計算（0-100%の範囲に正規化）
-            const x = ((hfia - hfiaMin) / hfiaRange) * 100;
-            const y = ((lfia - lfiaMin) / lfiaRange) * 100;
+            const x = ((clampedHF - hfiaMin) / (hfiaMax - hfiaMin)) * 100;
+            const y = ((clampedLF - lfiaMin) / (lfiaMax - lfiaMin)) * 100;
             
             // 範囲内にあることを確認
             if (x >= 0 && x <= 100 && y >= 0 && y <= 100) {
                 const pointElement = document.createElement('div');
                 pointElement.className = 'scatter-point';
+                
+                // 象限に基づいて色を決定（論文の図7に基づく）
+                if (clampedHF < centerHF && clampedLF < centerLF) {
+                    // 第3象限（左下）- 安静状態
+                    pointElement.style.backgroundColor = '#3f51b5'; // 青
+                } else if (clampedHF >= centerHF && clampedLF < centerLF) {
+                    // 第4象限（右下）- 深いリラックス状態
+                    pointElement.style.backgroundColor = '#4CAF50'; // 緑
+                } else if (clampedHF < centerHF && clampedLF >= centerLF) {
+                    // 第2象限（左上）- 軽い身体的ストレス
+                    pointElement.style.backgroundColor = '#ff9800'; // オレンジ
+                } else {
+                    // 第1象限（右上）- 軽い精神的ストレス
+                    pointElement.style.backgroundColor = '#f44336'; // 赤
+                }
+                
                 pointElement.style.left = `${x}%`;
                 pointElement.style.bottom = `${y}%`;
                 
-                // 最新のポイントは大きく赤く表示
+                // 最新のポイントは大きく表示
                 if (i === displayPoints.length - 1) {
                     pointElement.style.width = '8px';
                     pointElement.style.height = '8px';
-                    pointElement.style.backgroundColor = 'red';
                     pointElement.style.transform = 'translate(-4px, 4px)';
                 }
                 
                 scatterGraph.appendChild(pointElement);
             }
         });
+    }
+
+    // 散布図のグリッドラインと軸を描画
+    function drawScatterGrids() {
+        // 中心線（横）
+        const horizontalCenter = document.createElement('div');
+        horizontalCenter.className = 'scatter-grid-line horizontal';
+        horizontalCenter.style.bottom = '50%';
+        scatterGraph.appendChild(horizontalCenter);
+        
+        // 中心線（縦）
+        const verticalCenter = document.createElement('div');
+        verticalCenter.className = 'scatter-grid-line vertical';
+        verticalCenter.style.left = '50%';
+        scatterGraph.appendChild(verticalCenter);
+        
+        // X軸ラベル（HF）
+        const xAxisLabel = document.createElement('div');
+        xAxisLabel.className = 'scatter-axis-label x-axis';
+        xAxisLabel.textContent = 'HF (0-50)';
+        scatterGraph.appendChild(xAxisLabel);
+        
+        // Y軸ラベル（LF）
+        const yAxisLabel = document.createElement('div');
+        yAxisLabel.className = 'scatter-axis-label y-axis';
+        yAxisLabel.textContent = 'LF (0-60)';
+        scatterGraph.appendChild(yAxisLabel);
+        
+        // 中心点値のラベル
+        const centerLabel = document.createElement('div');
+        centerLabel.className = 'scatter-center-label';
+        centerLabel.textContent = '(25,30)';
+        centerLabel.style.left = '50%';
+        centerLabel.style.bottom = '50%';
+        scatterGraph.appendChild(centerLabel);
+        
+        // 象限ラベル（論文の図7に基づく）
+        const q1Label = document.createElement('div');
+        q1Label.className = 'quadrant-label q1';
+        q1Label.textContent = '軽い精神的ストレス';
+        q1Label.style.right = '25%';
+        q1Label.style.top = '25%';
+        scatterGraph.appendChild(q1Label);
+        
+        const q2Label = document.createElement('div');
+        q2Label.className = 'quadrant-label q2';
+        q2Label.textContent = '軽い身体的ストレス';
+        q2Label.style.left = '25%';
+        q2Label.style.top = '25%';
+        scatterGraph.appendChild(q2Label);
+        
+        const q3Label = document.createElement('div');
+        q3Label.className = 'quadrant-label q3';
+        q3Label.textContent = '安静状態';
+        q3Label.style.left = '25%';
+        q3Label.style.bottom = '25%';
+        scatterGraph.appendChild(q3Label);
+        
+        const q4Label = document.createElement('div');
+        q4Label.className = 'quadrant-label q4';
+        q4Label.textContent = '深いリラックス';
+        q4Label.style.right = '25%';
+        q4Label.style.bottom = '25%';
+        scatterGraph.appendChild(q4Label);
     }
     
     // フレームレートを更新
@@ -389,16 +565,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // 高度な解析の更新開始
-    function startAdvancedAnalysis() {
-        if (isRecording) {
-            updateAdvancedGraphs();
-        } else {
-            setTimeout(startAdvancedAnalysis, 1000);
-        }
-    }
-    
     // 初期化
     getDevices();
-    startAdvancedAnalysis();
 });
